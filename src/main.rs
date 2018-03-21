@@ -39,7 +39,7 @@ impl Blockchain {
         }
     }
 
-    pub fn new_block (mut self, proof: u64) -> Block {
+    pub fn new_block (&mut self, proof: u64) -> Block {
         let block = match self.chain.last() {
             Some(last) => {
                 Block {
@@ -68,7 +68,7 @@ impl Blockchain {
         return block;
     }
 
-    pub fn new_transacion (mut self, sender: &str, recipient: &str, amount: u64) -> u64 {
+    pub fn new_transaction (&mut self, sender: &str, recipient: &str, amount: u64) -> u64 {
         let transaction = Transaction {
             sender: sender.to_owned(),
             recipient: recipient.to_owned(),
@@ -96,7 +96,7 @@ impl Blockchain {
         sha.result_str()
     }
 
-    fn proof_of_work (self, block: &Block) -> u64 {
+    pub fn proof_of_work (&self, block: &Block) -> u64 {
         let mut proof = 0;
         while !Blockchain::is_valid_proof(block, proof) {
             proof += 1;
@@ -109,12 +109,68 @@ impl Blockchain {
         test_block.proof = proof;
         let hash = Blockchain::hash(&test_block);
         match &hash[0..4] {
-            "0000" => true,
-            _ => false,
+            "0000" => {
+                println!("found proof");
+                println!("proof: {}", proof);
+                println!("hash: {}", hash);
+                true
+            },
+            _ => false
         }
     }
 }
 
-fn main() {
-    println!("Hello, world!");
+fn new_transaction (blockchain: &mut Blockchain, transaction: &Transaction) -> u64 {
+    let index = blockchain.new_transaction(&transaction.sender, &transaction.recipient, transaction.amount);
+    println!("a new transaction was added to block {}", index);
+    index
 }
+
+fn mine (blockchain: &mut Blockchain) {
+    let proof = {
+        // avoid error[E0502] cannot bororw `*blockchain` as mutable because it is also borrowed as imutable
+        // https://qiita.com/knknkn1162/items/1d190880efffe3578d92
+        let last_block = {
+            match blockchain.last_block() {
+                None => panic!("empty blockchain"),
+                Some(block) => block
+            }
+        };
+        let proof = blockchain.proof_of_work(&last_block);
+        proof
+    };
+
+    blockchain.new_transaction("0", "my address", 1);
+    let block = blockchain.new_block(proof);
+
+    println!("mined a new block");
+    println!("index: {}", block.index);
+    println!("last transaction: {}", serde_json::to_string(&block.transactions[block.transactions.len() - 1]).unwrap());
+    println!("proof: {:x}", block.proof);
+    println!("previous hash: {}", block.previous_hash);
+}
+
+fn main() {
+    // create blockchain
+    let mut blockchain = Blockchain::new();
+    // add genesis block
+    blockchain.new_block(0);
+    // add a transaction
+    let mut transaction = Transaction {sender: "my address".to_string(), recipient: "your address".to_string(), amount: 100};
+    new_transaction(&mut blockchain, &transaction);
+    transaction.amount = 200;
+    new_transaction(&mut blockchain, &transaction);
+    transaction.amount = 300;
+    new_transaction(&mut blockchain, &transaction);
+    // mine
+    mine(&mut blockchain);
+
+    transaction.amount = 400;
+    new_transaction(&mut blockchain, &transaction);
+    transaction.amount = 500;
+    new_transaction(&mut blockchain, &transaction);
+    // mine
+    mine(&mut blockchain);
+}
+
+
